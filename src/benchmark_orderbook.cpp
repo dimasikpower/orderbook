@@ -24,12 +24,18 @@ int main() {
     std::uniform_int_distribution<int> side_dist(0, 1); // 0=buy, 1=sell
 
     // 1) Build 1000 price levels, each with 100 orders
-    double start_price = 100.0;
-    for (int level = 0; level < 1000; ++level) {
-        double price = start_price + level; // e.g. 100, 101, ...
-        for (int j = 0; j < 100; ++j) {
+    // Генерируем 10 000 УРОВНЕЙ на широком диапазоне
+    const int NUM_LEVELS = 10000;
+    const int MIN_TEST_PRICE = 5000;   // $50.00
+    const int MAX_TEST_PRICE = 150000; // $1500.00
+
+    std::uniform_int_distribution<int> price_dist(MIN_TEST_PRICE, MAX_TEST_PRICE);
+
+    for (int i = 0; i < NUM_LEVELS; ++i) {
+        int price = price_dist(rng); // случайная цена в диапазоне
+        for (int j = 0; j < 10; ++j) { // по 10 ордеров на уровень
             int quantity = qty_dist(rng);
-            BookSide side = (level % 2 == 0) ? BookSide::bid : BookSide::ask;
+            BookSide side = (i % 2 == 0) ? BookSide::bid : BookSide::ask;
             orderbook.add_order(quantity, price, side);
         }
     }
@@ -37,15 +43,25 @@ int main() {
     // Collect all IDs for modifies/deletes
     vector<uint64_t> all_ids;
     // Bids
-    for (auto& [price, dq] : orderbook.get_bids()) {
-        for (auto& orderPtr : dq) {
-            all_ids.push_back(orderPtr->id);
+    // Bids: идём от высоких цен к низким
+    for (int price_cents = MAX_PRICE_CENTS; price_cents >= MIN_PRICE_CENTS; --price_cents) {
+        size_t idx = price_cents - MIN_PRICE_CENTS;
+        auto& dq = orderbook.get_bids()[idx];
+        if (!dq.empty()) {
+            for (auto& orderPtr : dq) {
+                all_ids.push_back(orderPtr->id);
+            }
         }
     }
-    // Asks
-    for (auto& [price, dq] : orderbook.get_asks()) {
-        for (auto& orderPtr : dq) {
-            all_ids.push_back(orderPtr->id);
+
+    // Asks: идём от низких цен к высоким
+    for (int price_cents = MIN_PRICE_CENTS; price_cents <= MAX_PRICE_CENTS; ++price_cents) {
+        size_t idx = price_cents - MIN_PRICE_CENTS;
+        auto& dq = orderbook.get_asks()[idx];
+        if (!dq.empty()) {
+            for (auto& orderPtr : dq) {
+                all_ids.push_back(orderPtr->id);
+            }
         }
     }
 
@@ -173,18 +189,20 @@ int main() {
         if (side == Side::buy) {
             // For a buy, we do not want a price better than the current best bid.
             // Assume bids are stored in a way where the best bid is the highest price.
-            double best_bid = orderbook.get_bids().empty() 
-                ? start_price 
-                : orderbook.get_bids().rbegin()->first;
+            // double best_bid = orderbook.get_bids().empty() 
+            //     ? start_price 
+            //     : orderbook.get_bids().rbegin()->first;
+        int best_bid_cents = orderbook.best_quote(BookSide::bid);
+        double best_bid = (best_bid_cents == -1) ? 0.0 : best_bid_cents / 100.0;
             // Generate a non-negative offset and subtract it from best_bid.
             double offset = std::abs(price_offset(rng));
             limit_price = best_bid - offset;
         } else { // Side::sell
             // For a sell, we do not want a price better than the current best ask.
             // Assume asks are stored such that the best ask is the lowest price.
-            double best_ask = orderbook.get_asks().empty() 
-                ? start_price 
-                : orderbook.get_asks().begin()->first;
+
+            int best_bid_cents = orderbook.best_quote(BookSide::ask);
+            double best_ask = (best_bid_cents == -1) ? 0.0 : best_bid_cents / 100.0;
             double offset = std::abs(price_offset(rng));
             limit_price = best_ask + offset;
         }

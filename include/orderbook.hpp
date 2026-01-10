@@ -17,19 +17,30 @@
 #include <memory>
 #include "enums.hpp"
 #include "order.hpp"
+#include <set>
+
+static const int MIN_PRICE_CENTS = 1;
+static const int MAX_PRICE_CENTS =  200000; // $2000.00 — достаточно для $1500
+static const int PRICE_RANGE = MAX_PRICE_CENTS - MIN_PRICE_CENTS + 1; // 100000
 
 class Orderbook {
 private:
-    std::map<double, std::deque<std::unique_ptr<Order>>, std::greater<double>> m_bids;
-    std::map<double, std::deque<std::unique_ptr<Order>>, std::less<double>> m_asks;
+    // std::map<double, std::deque<std::unique_ptr<Order>>, std::greater<double>> m_bids;
+    // std::map<double, std::deque<std::unique_ptr<Order>>, std::less<double>> m_asks;
+    std::vector<std::deque<std::unique_ptr<Order>>> m_bids;
+    std::vector<std::deque<std::unique_ptr<Order>>> m_asks;
+
+    // orderbook.hpp
+    std::set<int> m_active_asks;
+    std::set<int> m_active_bids;
     
     // Cache for modify/delete
     std::unordered_map<uint64_t, std::pair<BookSide, double>> m_order_metadata;
 public:
     Orderbook(bool generate_dummies);
 
-    void add_order(int qty, double price, BookSide side);
-    std::pair<int, double> handle_order(OrderType type, int order_quantity, Side side, double price = 0);
+    void add_order(int qty, int32_t price, BookSide side);
+    std::pair<int, double> handle_order(OrderType type, int order_quantity, Side side, int32_t price = 0);
 
     bool modify_order(uint64_t id, int new_qty);
     bool delete_order(uint64_t id);
@@ -37,9 +48,9 @@ public:
     template <typename T>
     std::pair<int, double> fill_order(std::map<double, std::deque<std::unique_ptr<Order>>, T>& offers,
                                       const OrderType type, const Side side, int& order_quantity,
-                                      double price, int& units_transacted, double& total_value);
+                                      int32_t price, int& units_transacted, double& total_value);
 
-    double best_quote(BookSide side);
+    int best_quote(BookSide side);
 
     const auto& get_bids() { return m_bids; }
     const auto& get_asks() { return m_asks; }
@@ -48,4 +59,13 @@ public:
     void print_leg(std::map<double, std::deque<std::unique_ptr<Order>>, T>& orders, BookSide side);
 
     void print();
+    void print_asks();
+    void print_bids();
+    // Правильно — без Orderbook::
+    std::pair<int, double> fill_bids(int& order_quantity, int limit_price_cents, int& units_transacted, double& total_value);
+    std::pair<int, double> fill_asks(int& order_quantity, int limit_price_cents, int& units_transacted, double& total_value);
+
+    int m_best_bid = 0;
+    int m_best_ask = MAX_PRICE_CENTS + 1;
+
 };

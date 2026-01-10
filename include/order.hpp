@@ -22,6 +22,7 @@ struct Order {
     int quantity;
     BookSide side;
     double price;
+    int32_t price_cents;
     uint64_t timestamp;
 
     Order(int q, double p, BookSide s, uint64_t t = unix_time())

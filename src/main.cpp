@@ -60,12 +60,14 @@ int main(){
 			}else if(order_type == OrderType::limit){
 				cout << "\nEnter limit price: ";
 				cin >> price;
+				double input_price;
+				int price_cents = static_cast<int>(price * 100 + 0.5);
 
 				cout << "\nSubmitting limit " << ((side == Side::buy) ? "buy":"sell") 
                     << " order for " << quantity << " units @ $" << price << ".." << "\n";
 
 				u_int64_t start_time = unix_time();
-                std::pair<int,double> fill = ob.handle_order(order_type, quantity, side, price);
+                std::pair<int,double> fill = ob.handle_order(order_type, quantity, side, price_cents);
 				u_int64_t end_time = unix_time();
 
                 print_fill(fill, quantity, start_time, end_time);
