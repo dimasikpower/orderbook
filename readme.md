@@ -34,7 +34,7 @@ The project is designed using Object-Oriented Programming (OOP) principles. It i
 
 To compile and run the program, follow these steps:
 
-1. Clone the repo: ``https://github.com/engineswap/cpp-orderbook.git``
+1. Clone the repo: ``https://github.com/dimasikpower/orderbook.git``
 2. ``cd cpp-orderbook``
 3. Compile the program using `make` 
 4. Run the program with `./main`
