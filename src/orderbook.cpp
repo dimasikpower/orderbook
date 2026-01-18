@@ -149,7 +149,7 @@ std::pair<int, double> Orderbook::handle_order(OrderType type, int order_quantit
     if (type == OrderType::market) {
         if (side == Side::sell) {
             // return fill_order(m_bids, OrderType::market, Side::sell, order_quantity, price, units_transacted, total_value);
-            return fill_bids(order_quantity, price, units_transacted, total_value);
+            return fill_bids(order_quantity, -1, units_transacted, total_value);
         } else if (side == Side::buy) {
             return fill_asks(order_quantity, -1, units_transacted, total_value);
             // return fill_order(m_asks, OrderType::market, Side::buy, order_quantity, price, units_transacted, total_value);
