@@ -51,3 +51,7 @@ clean:
 
 # Phony target to prevent filename conflict
 .PHONY: clean
+
+
+tlb:
+	perf stat -e dTLB-load-misses,iTLB-load-misses ./benchmark_orderbook

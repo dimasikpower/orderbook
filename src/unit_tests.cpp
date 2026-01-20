@@ -22,13 +22,13 @@ void test_add_order() {
     assert(bids.size() == 1);                   // Only one price level in bids
     assert(bids.at(10050).size() == 1);          // One order at price 10050
     assert(bids.at(10050)[0]->quantity == 100);  // Order quantity is 100
-    assert(bids.at(10050)[0]->price == 10050);   // Order price is 10050
+    assert(bids.at(10050)[0]->price_cents == 10050);   // Order price is 10050
 
     // Check if the ask order was added correctly
     assert(asks.size() == 1);                   // Only one price level in asks
     assert(asks.at(10100).size() == 1);          // One order at price 10100
     assert(asks.at(10100)[0]->quantity == 200);  // Order quantity is 200
-    assert(asks.at(10100)[0]->price == 10100);   // Order price is 10100
+    assert(asks.at(10100)[0]->price_cents == 10100);   // Order price is 10100
 
     cout << "test_add_order passed!" << endl;
 }

@@ -20,6 +20,10 @@ You can watch a demo of the project in action [here](https://www.youtube.com/wat
 [![Demo video](https://img.youtube.com/vi/E2y5wiBO1oE/0.jpg)](https://www.youtube.com/watch?v=E2y5wiBO1oE)
 ***
 
+## benchmark new version, very fast with many optimizations
+![bench](./screenshots/bench_new_version.png)
+
+
 ## Design
 
 The project is designed using Object-Oriented Programming (OOP) principles. It is divided into three main parts:
@@ -45,9 +49,17 @@ To compile and run the program, follow these steps:
 ## Screenshots
 
 A market buy order getting filled
-![Screenshot 1](./screenshots/ss3.png)
+![Screenshot 1](./screenshots/buy_order_my_version.png)
 
 
 Visualizing the orderbook
 ![Screenshot 3](./screenshots/ss4.png)
 ***
+
+
+## Latest version
+Reduced market order latency from 313 ns → 180 ns (42% improvement)
+Eliminated TLB pressure by replacing std::deque with custom PriceLevel with vector + reserve
+Achieved < 80k dTLB-load-misses (vs 740k originally) via memory layout optimization
+Used perf, TLB profiling, and low-level CPU knowledge to guide optimizations
+Full FIFO semantics, thread-safe design, supports 100k+ orders

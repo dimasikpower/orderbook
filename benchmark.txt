@@ -1,0 +1,64 @@
+[2026-01-19]
+dimon@WIN-HBP9UMOFUGR:~/projects/orderbook$ ./benchmark_orderbook 
+Created 100000 orders total.
+Average time for 5000 market orders: 219.145 ns
+Average time for 500 modifies: 600.126 ns
+Average time for 500 deletes: 599.492 ns
+Average time for 1000 limit orders: 823.177 ns
+
+[2026-01-21] replace deque on vector with reserve()
+dimon@WIN-HBP9UMOFUGR:~/projects/orderbook$ make tlb
+perf stat -e dTLB-load-misses,iTLB-load-misses ./benchmark_orderbook
+Created 100000 orders total.
+Average time for 5000 market orders: 179.581 ns
+Average time for 500 modifies: 287.558 ns
+Average time for 500 deletes: 351.354 ns
+Average time for 1000 limit orders: 619.55 ns
+
+ Performance counter stats for './benchmark_orderbook':
+
+             83048      dTLB-load-misses:u                                                    
+             19047      iTLB-load-misses:u                                                    
+
+       0.101410609 seconds time elapsed
+
+       0.082361000 seconds user
+       0.020590000 seconds sys
+
+[2026-01-21] replace deque on vector with reserve()
+dimon@WIN-HBP9UMOFUGR:~/projects/orderbook$ make tlb
+perf stat -e dTLB-load-misses,iTLB-load-misses ./benchmark_orderbook
+Created 100000 orders total.
+Average time for 5000 market orders: 184.716 ns
+Average time for 500 modifies: 299.376 ns
+Average time for 500 deletes: 325.5 ns
+Average time for 1000 limit orders: 539.864 ns
+
+ Performance counter stats for './benchmark_orderbook':
+
+             79831      dTLB-load-misses:u                                                    
+             12595      iTLB-load-misses:u                                                    
+
+       0.095535098 seconds time elapsed
+
+       0.085249000 seconds user
+       0.010656000 seconds sys
+
+[2026-01-21] replace deque on vector with reserve()
+dimon@WIN-HBP9UMOFUGR:~/projects/orderbook$ make tlb
+perf stat -e dTLB-load-misses,iTLB-load-misses ./benchmark_orderbook
+Created 100000 orders total.
+Average time for 5000 market orders: 178.837 ns
+Average time for 500 modifies: 288.124 ns
+Average time for 500 deletes: 320.992 ns
+Average time for 1000 limit orders: 535.862 ns
+
+ Performance counter stats for './benchmark_orderbook':
+
+             73626      dTLB-load-misses:u                                                    
+             18980      iTLB-load-misses:u                                                    
+
+       0.090094988 seconds time elapsed
+
+       0.069889000 seconds user
+       0.019968000 seconds sys

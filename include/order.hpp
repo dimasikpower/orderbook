@@ -19,12 +19,11 @@ inline uint64_t generate_unique_id() {
 
 struct Order {
     uint64_t id;
-    int quantity;
-    BookSide side;
-    double price;
     int32_t price_cents;
-    uint64_t timestamp;
+    int quantity;
+    bool active = false; // помечает, используется ли слот
 
-    Order(int q, double p, BookSide s, uint64_t t = unix_time())
-        : id(generate_unique_id()), quantity(q), price(p), side(s), timestamp(t) {}
+    Order() = default;
+    Order(uint64_t id_, int qty, int32_t price, bool active_ = true)
+        : id(id_), price_cents(price), quantity(qty), active(active_) {}
 };

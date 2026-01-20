@@ -18,33 +18,35 @@
 using namespace std;
 
 void Orderbook::add_order(int qty, int32_t price_cents, BookSide side) {
-    // Проверка границ
-    if (price_cents < MIN_PRICE_CENTS || price_cents > MAX_PRICE_CENTS) {
-        return; // или бросить исключение
+    if (price_cents < MIN_PRICE_CENTS || price_cents > MAX_PRICE_CENTS) return;
+
+    Order* order = m_order_pool.acquire(qty, price_cents);
+    // if (!order) return; // пул исчерпан
+
+    if (!order) {
+        // Лучше бросить исключение или залогировать
+        throw std::runtime_error("Order pool exhausted");
     }
 
+    uint64_t order_id = order->id;
     size_t idx = price_cents - MIN_PRICE_CENTS;
 
-    // Создаём ордер
-    auto order = std::make_unique<Order>(qty, price_cents, side);
-    uint64_t order_id = order->id;
-
-    // Добавляем в соответствующую книгу
     if (side == BookSide::bid) {
-        m_bids[idx].push_back(std::move(order));
-        m_active_bids.insert(price_cents); // добавляем в активные уровни
-        if (price_cents > m_best_bid) {
-            m_best_bid = price_cents;
+        if (m_bids.empty()) {
+            m_bids.reserve(64); 
         }
-    } else { // BookSide::ask
-        m_asks[idx].push_back(std::move(order));
+        m_bids[idx].push_back(order);
+        m_active_bids.insert(price_cents);
+        if (price_cents > m_best_bid) m_best_bid = price_cents;
+    } else {
+        if (m_asks.empty()) {
+            m_asks.reserve(64); 
+        }
+        m_asks[idx].push_back(order);
         m_active_asks.insert(price_cents);
-        if (price_cents < m_best_ask) {
-            m_best_ask = price_cents;
-        }
+        if (price_cents < m_best_ask) m_best_ask = price_cents;
     }
 
-    // Кэшируем ID для modify/delete
     m_order_metadata[order_id] = std::make_pair(side, price_cents);
 }
 
@@ -214,62 +216,39 @@ int Orderbook::best_quote(BookSide side) {
 
 // Search through whole book and modify the target order
 bool Orderbook::modify_order(uint64_t id, int new_qty) {
-    if (m_order_metadata.find(id) == m_order_metadata.end()) {
-        return false;
-    }
+    auto it = m_order_metadata.find(id);
+    if (it == m_order_metadata.end()) return false;
 
-    auto [side, price_cents] = m_order_metadata[id];
+    auto [side, price_cents] = it->second;
     size_t idx = price_cents - MIN_PRICE_CENTS;
+    auto& levels = (side == BookSide::bid) ? m_bids : m_asks;
 
-    auto modify_in_vector = [&](auto& order_levels) -> bool {
-        if (idx >= order_levels.size()) return false;
-        for (auto& order : order_levels[idx]) {
-            if (order->id == id) {
-                order->quantity = new_qty;
-                return true;
-            }
+    for (auto& order : levels[idx]) {
+        if (order->id == id) {
+            order->quantity = new_qty;
+            return true;
         }
-        return false;
-    };
-
-    if (side == BookSide::ask) {
-        return modify_in_vector(m_asks);
-    } else if (side == BookSide::bid) {
-        return modify_in_vector(m_bids);
     }
     return false;
 }
 
-// Sweep through the book 
 bool Orderbook::delete_order(uint64_t id) {
-    // Убедись, что такой ордер существует
-    if (m_order_metadata.find(id) == m_order_metadata.end()) {
-        return false;
-    }
+    auto it = m_order_metadata.find(id);
+    if (it == m_order_metadata.end()) return false;
 
-    auto [side, price_cents] = m_order_metadata[id];
-    m_order_metadata.erase(id); // удаляем из кэша
+    auto [side, price_cents] = it->second;
+    m_order_metadata.erase(it);
 
     size_t idx = price_cents - MIN_PRICE_CENTS;
+    auto& levels = (side == BookSide::bid) ? m_bids : m_asks;
+    auto& orders = levels[idx];
 
-    auto remove_from_vector = [&](std::vector<std::deque<std::unique_ptr<Order>>>& order_levels) -> bool {
-        if (idx >= order_levels.size()) return false;
-
-        auto& orders = order_levels[idx];
-        for (auto it = orders.begin(); it != orders.end(); ++it) {
-            if ((*it)->id == id) {
-                orders.erase(it);
-                // НЕТ orders_map.erase(price) — вектору это не нужно!
-                return true;
-            }
+    for (auto oit = orders.begin(); oit != orders.end(); ++oit) {
+        if ((*oit)->id == id) {
+            m_order_pool.release(*oit); // ✅ освобождаем в пул
+            orders.erase(oit);
+            return true;
         }
-        return false;
-    };
-
-    if (side == BookSide::bid) {
-        return remove_from_vector(m_bids);
-    } else if (side == BookSide::ask) {
-        return remove_from_vector(m_asks);
     }
     return false;
 }
@@ -323,16 +302,15 @@ void Orderbook::print_leg(map<double, deque<unique_ptr<Order>>, T>& hashmap, Boo
 
 // Для покупок (bids) — идём от высоких цен к низким
 std::pair<int, double> Orderbook::fill_bids(int& order_quantity, int limit_price, int& units_transacted, double& total_value) {
-    // Если нет активных bid-уровней — выходим
     if (m_active_bids.empty()) {
         return {units_transacted, total_value};
     }
 
-    // Идём от самой высокой цены к самой низкой
-    for (auto it = m_active_bids.rbegin(); it != m_active_bids.rend(); ++it) {
+    // Используем reverse_iterator для прохода от высоких цен к низким
+    for (auto it = m_active_bids.rbegin(); it != m_active_bids.rend(); ) {
         int price_cents = *it;
 
-        // Для лимитного sell: если цена ниже лимита — выходим
+        // Если лимит задан и цена bid ниже лимита продавца — выходим (рыночный ордер sell)
         if (limit_price > 0 && price_cents < limit_price) {
             break;
         }
@@ -352,26 +330,36 @@ std::pair<int, double> Orderbook::fill_bids(int& order_quantity, int limit_price
                 order_quantity = 0;
                 return {units_transacted, total_value};
             } else {
-                // Полное исполнение
+                // Полное исполнение встречного ордера
                 units_transacted += available_qty;
                 total_value += (available_qty * price_cents) / 100.0;
                 order_quantity -= available_qty;
+
+                // ✅ 1. Возвращаем ордер в пул (ВАЖНО!)
+                m_order_pool.release(current_order);
+
                 orders.pop_front();
                 m_order_metadata.erase(current_order->id);
 
-                // Если уровень стал пустым — удаляем из активных
+                // Если уровень цен опустел, удаляем его из активных
                 if (orders.empty()) {
+                    // ✅ 2. Безопасно удаляем по значению, не ломая текущий итератор напрямую
                     m_active_bids.erase(price_cents);
+
+                    // ✅ 3. Восстанавливаем итератор, так как структура сета изменилась
+                    it = m_active_bids.rbegin();
+
                     // Обновляем лучший bid
                     if (price_cents == m_best_bid) {
-                        if (m_active_bids.empty()) {
-                            m_best_bid = 0;
-                        } else {
-                            m_best_bid = *m_active_bids.rbegin(); // самый высокий оставшийся
-                        }
+                        m_best_bid = m_active_bids.empty() ? 0 : *m_active_bids.rbegin();
                     }
                 }
             }
+        }
+
+        // Если уровень не пустой (мы только частично его съели), двигаем итератор дальше
+        if (!orders.empty()) {
+            ++it;
         }
 
         if (order_quantity == 0) break;
@@ -387,8 +375,10 @@ std::pair<int, double> Orderbook::fill_asks(int& order_quantity, int limit_price
         return {units_transacted, total_value};
     }
 
-    for (int price_cents : m_active_asks) {
-        // Если лимит задан и цена слишком высока — выходим
+    // Используем итератор, а не range-based for
+    for (auto it = m_active_asks.begin(); it != m_active_asks.end(); ) {
+        int price_cents = *it;
+
         if (limit_price > 0 && price_cents > limit_price) {
             break;
         }
@@ -401,28 +391,36 @@ std::pair<int, double> Orderbook::fill_asks(int& order_quantity, int limit_price
             int available_qty = current_order->quantity;
 
             if (available_qty > order_quantity) {
-                // Частичное исполнение
                 units_transacted += order_quantity;
                 total_value += (order_quantity * price_cents) / 100.0;
                 current_order->quantity -= order_quantity;
                 order_quantity = 0;
                 return {units_transacted, total_value};
             } else {
-                // Полное исполнение
                 units_transacted += available_qty;
                 total_value += (available_qty * price_cents) / 100.0;
                 order_quantity -= available_qty;
+                
+                // ✅ ВАЖНО: Не забываем вернуть ордер в пул!
+                m_order_pool.release(current_order);
+
                 orders.pop_front();
                 m_order_metadata.erase(current_order->id);
 
-                // Если уровень опустел — удаляем из активных
                 if (orders.empty()) {
-                    m_active_asks.erase(price_cents);
+                    // ✅ ВАЖНО: Сначала инкрементируем итератор (it++), потом удаляем текущий (erase)
+                    it = m_active_asks.erase(it); 
+                    
                     if (price_cents == m_best_ask) {
                         m_best_ask = m_active_asks.empty() ? (MAX_PRICE_CENTS + 1) : *m_active_asks.begin();
                     }
-                }
+                } 
             }
+        }
+        
+        // Если мы не удалили элемент (уровень не стал пустым), двигаем итератор вручную
+        if (!orders.empty()) {
+             ++it;
         }
 
         if (order_quantity == 0) break;
@@ -430,7 +428,6 @@ std::pair<int, double> Orderbook::fill_asks(int& order_quantity, int limit_price
 
     return {units_transacted, total_value};
 }
-
 void Orderbook::print_bids() {
     for (int price_cents = MIN_PRICE_CENTS; price_cents <= MAX_PRICE_CENTS; ++price_cents) {
         auto& orders = m_bids[price_cents - MIN_PRICE_CENTS];
