@@ -1,8 +1,39 @@
-# Orderbook in C++
+# 🚀 Performance-Optimized Order Book (Fork)
 
-This C++ project simulates a basic orderbook, a key component in financial trading systems, managing buy and sell orders with a FIFO order matching algorithm. It supports both market and limit orders, handles partial and full fills, and visually represents the state of the orderbook. 
+This project is a **performance-optimized fork** of the [engineswap/orderbook](https://github.com/engineswap/orderbook) — a basic C++ order book implementation designed for educational purposes.
 
+While the original claims *"orders can be executed in 4ns"*, real-world profiling reveals **significantly higher latency and high jitter** (e.g., delete operations up to **24 µs**). This version prioritizes **low-latency, predictable performance** suitable for HFT-like workloads.
 
+## ✅ Key Improvements
+
+| Metric                     | Original (`engineswap`)      | This Fork (`dimasikpower`) |
+|---------------------------|------------------------------|----------------------------|
+| **Market order latency**  | 314–353 ns                   | **178–185 ns**             |
+| **Modify latency**        | 1330–1390 ns                 | **287–299 ns**             |
+| **Delete latency**        | Up to **24,191 ns** (jitter) | **320–351 ns** (stable)    |
+| **dTLB-load-misses**      | ~740,000                     | **~73,000** (**↓ 10×**)    |
+| **Memory layout**         | Sorted `std::vector` + dynamic structures | **Price-indexed array** + custom `PriceLevel` |
+| **Allocation strategy**   | Dynamic (`new`/`delete`)     | **Preallocated `OrderPool` + `vector::reserve()`** |
+| **Access complexity**     | O(N) or O(log N)             | **O(1)** per price level   |
+
+## 🔧 Technical Highlights
+
+- Replaced dynamic containers with a **fixed-size price-indexed array** (`1–200,000` cents), covering all major instruments under $2000.
+- Implemented **FIFO semantics via a `head` pointer** in `PriceLevel` — zero-cost `pop_front()`.
+- Eliminated **reallocations during execution** using `std::vector::reserve()`.
+- Reduced **TLB pressure** by keeping data **dense, cache-friendly, and page-local**.
+- All optimizations validated with `perf` and real latency benchmarks.
+
+> 💡 **Trade-off**: Limited price range (vs arbitrary prices in the original) — but this aligns with how real exchanges represent prices in discrete ticks and enables O(1) performance.
+
+## 📊 Benchmarking
+
+Run benchmarks with TLB miss profiling:
+```bash
+make tlb
+```
+
+### DEMO
 ![Screenshot 1](./screenshots/ss1.png)
 ***
 ## Features
@@ -14,11 +45,6 @@ This C++ project simulates a basic orderbook, a key component in financial tradi
 * Fast, can execute orders in 4ns
 * Unit tests
 
-***
-## Demo Video
-You can watch a demo of the project in action [here](https://www.youtube.com/watch?v=E2y5wiBO1oE).
-[![Demo video](https://img.youtube.com/vi/E2y5wiBO1oE/0.jpg)](https://www.youtube.com/watch?v=E2y5wiBO1oE)
-***
 
 ## benchmark new version, very fast with many optimizations
 ![bench](./screenshots/bench_new_version.png)
